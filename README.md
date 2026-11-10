@@ -112,7 +112,7 @@ rm data/catalog.sqlite3
 python scanner.py scan /Volumes/OtterCloud/Audiobooks/Fiction
 python scanner.py scan /Volumes/OtterCloud/Audiobooks/Nonfiction
 python scanner.py scan /Volumes/OtterCloud/Audiobooks/LibriVox
-python scanner.py export-html /Volumes/OtterCloud/Audiobooks/catalog.html --source_root /Volumes/OtterCloud/Audiobooks
+python scanner.py export-html /Volumes/OtterCloud/Audiobooks/catalog.html --source-root /Volumes/OtterCloud/Audiobooks
 python scanner.py export-book-list /Volumes/OtterCloud/Audiobooks/book_list.txt
 
 # Full Catalog on Windows
@@ -120,5 +120,5 @@ del data\catalog.sqlite3
 python scanner.py scan W:\Audiobooks\Fiction
 python scanner.py scan W:\Audiobooks\Nonfiction
 python scanner.py scan W:\Audiobooks\LibriVox
-python scanner.py export-html W:\Audiobooks\catalog_win.html --source_root W:\Audiobooks
+python scanner.py export-html W:\Audiobooks\catalog_win.html --source-root W:\Audiobooks
 python scanner.py export-book-list W:\Audiobooks\book_list_win.txt
