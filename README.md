@@ -130,7 +130,6 @@ python scanner.py scan W:\Audiobooks\Nonfiction
 python scanner.py scan W:\Audiobooks\LibriVox
 python scanner.py export-html W:\Audiobooks\catalog_win.html --source-root W:\Audiobooks
 python scanner.py export-book-list W:\Audiobooks\book_list_win.txt
-```
 
 # Example outputs
 <li>Example list file: <A href="output_examples/book_list.txt">book_list.txt</A>
