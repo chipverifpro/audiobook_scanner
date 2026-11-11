@@ -1,7 +1,7 @@
 [project]
 name = "audiobook-scanner"
 version = "0.1.0"
-description = "Incrementally index audiobook audio metadata into SQLite and XML"
+description = "Incrementally index audiobook audio metadata into SQLite, XML, text, and HTML"
 requires-python = ">=3.10"
 dependencies = ["mutagen>=1.47"]
 

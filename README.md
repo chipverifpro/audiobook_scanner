@@ -15,7 +15,7 @@ python3 -m venv .venv
 python -m pip install mutagen
 ```
 
-## Full set of commands:
+## Full set of sample commands:
 
 ```sh
 python scanner.py scan /Volumes/OtterCloud/Audiobooks/Fiction
@@ -82,26 +82,27 @@ so place the catalogue at the audiobook-library level (for example,
 `/Volumes/OtterCloud/Audiobooks/catalog.html`) to produce `Fiction/...` image
 links that also work through another mount or an HTTP server.
 
-This project is now local, so its default `data/` directory is the intended
-location for the database. Use `--database /a/local/path/catalog.sqlite3` only
-when you want a separate catalogue.
+## Other options to modify command behavior
+`--source-root` is used by the `export-html` command when creating web links for cover images.  Strip this part off the front of the file path, and you get a relative path from the web page.  Example, the option `--source-root /Volumes/OtterCloud/Audiobooks` turns IMG SRC="file:///Volumes/OtterCloud/Audiobooks/Fiction/Adams/Hitchhiker/Cover.jpg" into IMG SRC="Fiction/Adams/Hitchiker/Cover.jpg".  Note that the path needs to look like the path used by the current operating system (Windows would use something like `--source-root W:\Audiobooks`).
+
+`--database` allows changing which database file to use.  This project is now local, so its default `data/` directory is the intended location for the database. Use `--database /a/local/path/catalog.sqlite3` only when you want a separate catalogue.
 
 
 Script to create all four webpages and book lists.
 
-# Librivox
+# Librivox partial catalog (Mac)
 rm data/catalog_librivox.sqlite3
 python scanner.py scan /Volumes/OtterCloud/Audiobooks/LibriVox --database data/catalog_librivox.sqlite3
 python scanner.py export-html /Volumes/OtterCloud/Audiobooks/librivox.html --database data/catalog_librivox.sqlite3
 python scanner.py export-book-list /Volumes/OtterCloud/Audiobooks/librivox_list.txt --database data/catalog_librivox.sqlite3
 
-# NonFiction
+# NonFiction partial catalog (Mac)
 rm data/catalog_nonfiction.sqlite3
 python scanner.py scan /Volumes/OtterCloud/Audiobooks/Nonfiction --database data/catalog_nonfiction.sqlite3
 python scanner.py export-html /Volumes/OtterCloud/Audiobooks/nonfiction.html --database data/catalog_nonfiction.sqlite3
 python scanner.py export-book-list /Volumes/OtterCloud/Audiobooks/nonfiction_list.txt --database data/catalog_nonfiction.sqlite3
 
-# Fiction
+# Fiction partial catalog (Mac)
 rm data/catalog_fiction.sqlite3
 python scanner.py scan /Volumes/OtterCloud/Audiobooks/Fiction --database data/catalog_fiction.sqlite3
 python scanner.py export-html /Volumes/OtterCloud/Audiobooks/fiction.html --database data/catalog_fiction.sqlite3
@@ -122,3 +123,8 @@ python scanner.py scan W:\Audiobooks\Nonfiction
 python scanner.py scan W:\Audiobooks\LibriVox
 python scanner.py export-html W:\Audiobooks\catalog_win.html --source-root W:\Audiobooks
 python scanner.py export-book-list W:\Audiobooks\book_list_win.txt
+
+# Example outputs
+<li>Example list file: <A href="output_examples/book_list.txt">book_list.txt</A>
+<li>Example html file: <A href="output_examples/catalog.html">catalog.html</A>
+<br>Note that the html example doesn't have the image files here.
