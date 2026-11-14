@@ -11,6 +11,7 @@ import argparse
 import html
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -25,7 +26,7 @@ from mutagen import File as MutagenFile
 from mutagen import MutagenError
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 AUDIO_SUFFIXES = {".mp3", ".m4a", ".m4b", ".flac", ".ogg", ".opus", ".wma", ".aac"}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -39,6 +40,13 @@ class DescriptionOverride:
     size_bytes: int | None
     modified_ns: int | None
     text: str | None
+
+
+@dataclass(frozen=True)
+class SeriesInfo:
+    """The optional series-wide information file for an Author - Series folder."""
+    info_path: str | None
+    is_complete: bool
 
 
 @dataclass(frozen=True)
@@ -177,6 +185,28 @@ def read_description_override(book_directory: Path, root: Path) -> DescriptionOv
     )
 
 
+def read_series_info(series_directory: Path, root: Path) -> SeriesInfo:
+    """Find a series.html or series.txt file and read its COMPLETE marker."""
+    # HTML wins when both exist, consistent with description-file precedence.
+    for filename in ("series.html", "series.txt"):
+        candidate = series_directory / filename
+        try:
+            if not candidate.is_file():
+                continue
+            # Only the first word is significant, so do not read a potentially
+            # long series overview merely to determine its completion status.
+            with candidate.open("r", encoding="utf-8-sig", errors="replace") as source:
+                first_chunk = source.read(4096)
+        except OSError as exc:
+            raise RuntimeError(f"cannot read {filename}: {exc}") from exc
+        first_word = re.search(r"\S+", first_chunk)
+        return SeriesInfo(
+            str(candidate.relative_to(root)),
+            bool(first_word and first_word.group(0).casefold() == "complete"),
+        )
+    return SeriesInfo(None, False)
+
+
 def scan_file(
     path: Path,
     root: Path,
@@ -230,6 +260,12 @@ def open_database(path: Path) -> sqlite3.Connection:
           id INTEGER PRIMARY KEY, source_id INTEGER NOT NULL REFERENCES catalog_sources(id),
           book_path TEXT NOT NULL, author_folder TEXT, series_folder TEXT, cover_image_path TEXT,
           UNIQUE(source_id, book_path)
+        );
+        CREATE TABLE IF NOT EXISTS series_info (
+          source_id INTEGER NOT NULL REFERENCES catalog_sources(id),
+          series_path TEXT NOT NULL, info_path TEXT, is_complete INTEGER NOT NULL DEFAULT 0
+            CHECK(is_complete IN (0, 1)),
+          PRIMARY KEY(source_id, series_path)
         );
         CREATE TABLE IF NOT EXISTS tracks (
           id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL REFERENCES books(id),
@@ -289,6 +325,19 @@ def update_book_cover(connection: sqlite3.Connection, source: int, book_path: st
     )
 
 
+def store_series_info(
+    connection: sqlite3.Connection,
+    source: int,
+    series_path: str,
+    info: SeriesInfo,
+) -> None:
+    connection.execute("""
+      INSERT INTO series_info(source_id, series_path, info_path, is_complete) VALUES (?, ?, ?, ?)
+      ON CONFLICT(source_id, series_path) DO UPDATE SET info_path=excluded.info_path,
+      is_complete=excluded.is_complete
+    """, (source, series_path, info.info_path, int(info.is_complete)))
+
+
 def store_result(connection: sqlite3.Connection, source: int, result: ScanResult, now: str) -> None:
     connection.execute("""
       INSERT INTO books(source_id, book_path, author_folder, series_folder, cover_image_path) VALUES (?, ?, ?, ?, ?)
@@ -340,6 +389,7 @@ def scan(
     books_seen: set[str] = set()
     cover_cache: dict[Path, str | None] = {}
     description_cache: dict[Path, DescriptionOverride] = {}
+    series_info_cache: dict[Path, SeriesInfo] = {}
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     try:
         for path in audio_files(root):
@@ -354,6 +404,16 @@ def scan(
                 book_path = str(relative_file.parent)
                 books_seen.add(book_path)
                 totals["books"] = len(books_seen)
+                # A top-level Author - Series folder is represented once in
+                # series_info, even when it contains many book directories.
+                if len(relative_file.parts) > 1:
+                    series_directory = root / relative_file.parts[0]
+                    if series_directory not in series_info_cache:
+                        series_info_cache[series_directory] = read_series_info(series_directory, root)
+                        store_series_info(
+                            connection, source, relative_file.parts[0],
+                            series_info_cache[series_directory],
+                        )
                 if path.parent not in cover_cache:
                     cover_cache[path.parent] = find_cover_image(path.parent, root)
                 cover_image_path = cover_cache[path.parent]

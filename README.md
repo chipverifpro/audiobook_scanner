@@ -63,6 +63,14 @@ intentionally clears the ID3 comment. If both files exist, `description.html`
 takes precedence. The scanner detects changes to the selected file during
 incremental scans.
 
+Place an optional UTF-8 `series.html` or `series.txt` directly in a top-level
+`Author - Series` folder to record information for the series as a whole. Its
+source-relative filename is stored once in the `series_info` database table.
+If the first word of the selected file is `COMPLETE` (case-insensitive), its
+`is_complete` flag is set to `1`; otherwise it is `0`. When both files exist,
+`series.html` takes precedence. The current HTML export does not yet display a
+badge, but it can use this stored flag without reading the network drive again.
+
 ## Other functions supported
 
 `export-xml` creates one entry per audio track. 
