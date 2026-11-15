@@ -26,7 +26,7 @@ from mutagen import File as MutagenFile
 from mutagen import MutagenError
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 AUDIO_SUFFIXES = {".mp3", ".m4a", ".m4b", ".flac", ".ogg", ".opus", ".wma", ".aac"}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -47,6 +47,7 @@ class SeriesInfo:
     """The optional series-wide information file for an Author - Series folder."""
     info_path: str | None
     is_complete: bool
+    text: str | None
 
 
 @dataclass(frozen=True)
@@ -186,25 +187,23 @@ def read_description_override(book_directory: Path, root: Path) -> DescriptionOv
 
 
 def read_series_info(series_directory: Path, root: Path) -> SeriesInfo:
-    """Find a series.html or series.txt file and read its COMPLETE marker."""
+    """Find a series.html or series.txt file, including its COMPLETE marker."""
     # HTML wins when both exist, consistent with description-file precedence.
     for filename in ("series.html", "series.txt"):
         candidate = series_directory / filename
         try:
             if not candidate.is_file():
                 continue
-            # Only the first word is significant, so do not read a potentially
-            # long series overview merely to determine its completion status.
-            with candidate.open("r", encoding="utf-8-sig", errors="replace") as source:
-                first_chunk = source.read(4096)
+            text = candidate.read_text(encoding="utf-8-sig", errors="replace")
         except OSError as exc:
             raise RuntimeError(f"cannot read {filename}: {exc}") from exc
-        first_word = re.search(r"\S+", first_chunk)
+        first_word = re.search(r"\S+", text)
         return SeriesInfo(
             str(candidate.relative_to(root)),
             bool(first_word and first_word.group(0).casefold() == "complete"),
+            text,
         )
-    return SeriesInfo(None, False)
+    return SeriesInfo(None, False, None)
 
 
 def scan_file(
@@ -263,7 +262,8 @@ def open_database(path: Path) -> sqlite3.Connection:
         );
         CREATE TABLE IF NOT EXISTS series_info (
           source_id INTEGER NOT NULL REFERENCES catalog_sources(id),
-          series_path TEXT NOT NULL, info_path TEXT, is_complete INTEGER NOT NULL DEFAULT 0
+          series_path TEXT NOT NULL, info_path TEXT, info_text TEXT,
+          is_complete INTEGER NOT NULL DEFAULT 0
             CHECK(is_complete IN (0, 1)),
           PRIMARY KEY(source_id, series_path)
         );
@@ -294,6 +294,9 @@ def open_database(path: Path) -> sqlite3.Connection:
     ):
         if column not in track_columns:
             connection.execute(f"ALTER TABLE tracks ADD COLUMN {column} {definition}")
+    series_columns = {row["name"] for row in connection.execute("PRAGMA table_info(series_info)")}
+    if "info_text" not in series_columns:
+        connection.execute("ALTER TABLE series_info ADD COLUMN info_text TEXT")
     connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     return connection
 
@@ -332,10 +335,10 @@ def store_series_info(
     info: SeriesInfo,
 ) -> None:
     connection.execute("""
-      INSERT INTO series_info(source_id, series_path, info_path, is_complete) VALUES (?, ?, ?, ?)
+      INSERT INTO series_info(source_id, series_path, info_path, info_text, is_complete) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(source_id, series_path) DO UPDATE SET info_path=excluded.info_path,
-      is_complete=excluded.is_complete
-    """, (source, series_path, info.info_path, int(info.is_complete)))
+      info_text=excluded.info_text, is_complete=excluded.is_complete
+    """, (source, series_path, info.info_path, info.text, int(info.is_complete)))
 
 
 def store_result(connection: sqlite3.Connection, source: int, result: ScanResult, now: str) -> None:
@@ -704,10 +707,13 @@ def export_html(database: Path, destination: Path, source_root_override: Path | 
             FROM tracks t
           )
           SELECT b.id AS book_id, s.root_path, b.book_path, b.author_folder, b.series_folder,
-                 b.cover_image_path, r.relative_path, r.codec, r.values_json, r.track_count,
+                 b.cover_image_path, si.info_path AS series_info_path,
+                 si.info_text AS series_info_text, si.is_complete AS series_is_complete,
+                 r.relative_path, r.codec, r.values_json, r.track_count,
                  r.total_duration_seconds, r.total_size_bytes
           FROM ranked_tracks r
           JOIN books b ON b.id=r.book_id JOIN catalog_sources s ON s.id=b.source_id
+          LEFT JOIN series_info si ON si.source_id=b.source_id AND si.series_path=b.author_folder
           WHERE r.track_order=1
           ORDER BY b.author_folder COLLATE NOCASE, b.book_path COLLATE NOCASE
         """).fetchall()
@@ -738,7 +744,8 @@ def export_html(database: Path, destination: Path, source_root_override: Path | 
 body { margin: 0 auto; max-width: 1060px; padding: .75rem; background: #f7f7f7; color: #202124; }
 h1 { margin: .2rem 0 .8rem; font-size: 1.5rem; } h3 { margin: 0 0 .5rem; font-size: 1.1rem; } .library { margin: 1.25rem 0; } .series { margin: .8rem 0; }
 .library > h2 { margin: 0; padding: .45rem .65rem; font-size: 1.3rem; background: #cfe6ff; color: #17212b; border-radius: .25rem; }
-.series > h3 { margin: 0; padding: .4rem .6rem; font-size: 1.15rem; background: #99ffcc; color: #17221d; border-radius: .25rem; }
+.series-heading { display: flex; align-items: center; min-height: 1.6rem; padding: .4rem .6rem; font-size: 1.15rem; background: #99ffcc; color: #17221d; border-radius: .25rem; }
+.series-heading h3 { margin: 0; font-size: inherit; }.series-link { color: inherit; cursor: pointer; text-decoration: underline; }.series-complete-badge { display: block; height: 1.6rem; width: auto; max-width: 2.15rem; margin-left: auto; object-fit: contain; }
 .covers { display: grid; grid-template-columns: repeat(5, minmax(0, 200px)); justify-content: start; gap: .55rem; padding: .65rem 0; }
 .book-card { min-width: 0; text-align: center; } .cover-button { border: 0; background: transparent; cursor: pointer; padding: 0; width: 100%; }
 .cover, .no-cover { box-sizing: border-box; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; border-radius: .3rem; box-shadow: 0 1px 4px #0006; }
@@ -749,7 +756,7 @@ h1 { margin: .2rem 0 .8rem; font-size: 1.5rem; } h3 { margin: 0 0 .5rem; font-si
 .close-button { position: absolute; top: .35rem; right: .35rem; border: 1px solid #899; border-radius: .2rem; background: #f1f3f4; color: #202124; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: .05rem .35rem; }
 .detail-grid { display: grid; grid-template-columns: minmax(160px, 260px) 1fr; gap: .7rem; }.detail-cover { width: 100%; max-height: 420px; object-fit: contain; }
 .metadata { border-collapse: collapse; width: 100%; max-width: 600px; font-size: .9rem; }.metadata th, .metadata td { padding: .25rem .4rem; border: 1px solid #9aa; text-align: left; vertical-align: top; }.metadata th { width: 9rem; background: #d8edf8; }
-.description { white-space: normal; }.description p { margin: .35rem 0; }.tracks { margin-top: .7rem; }.tracks li { margin: .2rem 0; }
+.description { white-space: normal; }.description p { margin: .35rem 0; }.series-detail { position: relative; margin: .55rem 0 0; padding: .7rem; border: 1px solid #b9c0c5; border-radius: .25rem; background: white; }.series-description { white-space: pre-wrap; }.series-description p { margin: .35rem 0; }.tracks { margin-top: .7rem; }.tracks li { margin: .2rem 0; }
 @media (max-width: 850px) { .covers { grid-template-columns: repeat(3, minmax(0, 200px)); } .detail-grid { grid-template-columns: 1fr; } .detail-cover { max-width: 260px; } }
 @media (max-width: 480px) { .covers { grid-template-columns: repeat(2, minmax(0, 1fr)); } body { padding: .5rem; } }
 </style>
@@ -768,14 +775,43 @@ function closeDetails(id) {
 <h1>Audiobook Catalog</h1>
 """]
     current_library: str | None = None
-    for library_name, heading in sorted(series, key=lambda item: (item[0].casefold(), item[1].casefold())):
+    for series_index, (library_name, heading) in enumerate(
+        sorted(series, key=lambda item: (item[0].casefold(), item[1].casefold()))
+    ):
         if library_name != current_library:
             if current_library is not None:
                 document.append('</section>')
             document.append(f'<section class="library"><h2>{html_escape(library_name)}</h2>')
             current_library = library_name
         books_in_series = series[(library_name, heading)]
-        document.append(f'<section class="series"><h3>{html_escape(heading)}</h3><div class="covers">')
+        series_record = books_in_series[0]
+        series_info_path = series_record["series_info_path"]
+        series_detail_id = f"series-{series_index}"
+        if series_info_path:
+            heading_html = (
+                f'<a class="series-link" href="#{series_detail_id}" '
+                f'onclick="toggleDetails(\'{series_detail_id}\'); return false;" '
+                f'aria-controls="{series_detail_id}">{html_escape(heading)}</a>'
+            )
+        else:
+            heading_html = html_escape(heading)
+        badge_html = (
+            '<img class="series-complete-badge" src="zz_catalog_files/series_complete_small.png" '
+            'alt="Series complete">'
+            if series_record["series_is_complete"] else ''
+        )
+        document.append(
+            f'<section class="series"><div class="series-heading"><h3>{heading_html}</h3>{badge_html}</div>'
+        )
+        if series_info_path:
+            series_text = series_record["series_info_text"] or ''
+            series_html = sanitize_description_html(series_text) if series_text else 'No series information available.'
+            document.append(
+                f'<article class="series-detail" id="{series_detail_id}" hidden><button class="close-button" type="button" '
+                f'onclick="closeDetails(\'{series_detail_id}\')" aria-label="Close series details">&times;</button>'
+                f'<div class="series-description">{series_html}</div></article>'
+            )
+        document.append('<div class="covers">')
         for book in sorted(books_in_series, key=lambda row: Path(row["book_path"]).name.casefold()):
             values = json.loads(book["values_json"])
             title = Path(book["book_path"]).name or book["book_path"]
