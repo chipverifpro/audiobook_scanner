@@ -378,6 +378,48 @@ def report_progress(totals: dict[str, int]) -> None:
     )
 
 
+def remove_missing_entries(
+    connection: sqlite3.Connection, source: int, seen_track_paths: set[str],
+) -> tuple[int, int, int]:
+    """Remove stale catalogue rows for one fully scanned source root."""
+    connection.execute("CREATE TEMP TABLE scan_seen_track_paths (relative_path TEXT PRIMARY KEY)")
+    connection.executemany(
+        "INSERT INTO scan_seen_track_paths(relative_path) VALUES (?)",
+        ((path,) for path in seen_track_paths),
+    )
+    removed_tracks = connection.execute("""
+      DELETE FROM tracks
+      WHERE book_id IN (SELECT id FROM books WHERE source_id=?)
+        AND NOT EXISTS (
+          SELECT 1 FROM scan_seen_track_paths seen
+          WHERE seen.relative_path=tracks.relative_path
+        )
+    """, (source,)).rowcount
+    removed_books = connection.execute("""
+      DELETE FROM books
+      WHERE source_id=?
+        AND NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.book_id=books.id)
+    """, (source,)).rowcount
+    removed_series = connection.execute("""
+      DELETE FROM series_info
+      WHERE source_id=?
+        AND NOT EXISTS (
+          SELECT 1 FROM books
+          WHERE books.source_id=series_info.source_id
+            AND books.author_folder=series_info.series_path
+        )
+    """, (source,)).rowcount
+    connection.execute("""
+      DELETE FROM scan_errors
+      WHERE source_id=?
+        AND NOT EXISTS (
+          SELECT 1 FROM scan_seen_track_paths seen
+          WHERE seen.relative_path=scan_errors.relative_path
+        )
+    """, (source,))
+    return removed_tracks, removed_books, removed_series
+
+
 def scan(
     root: Path,
     database: Path,
@@ -388,8 +430,12 @@ def scan(
     root = root.resolve()
     connection = open_database(database)
     source = source_id(connection, root)
-    totals = {"found": 0, "scanned": 0, "unchanged": 0, "errors": 0, "books": 0}
+    totals = {
+        "found": 0, "scanned": 0, "unchanged": 0, "errors": 0, "books": 0,
+        "removed_tracks": 0, "removed_books": 0, "removed_series": 0,
+    }
     books_seen: set[str] = set()
+    seen_track_paths: set[str] = set()
     cover_cache: dict[Path, str | None] = {}
     description_cache: dict[Path, DescriptionOverride] = {}
     series_info_cache: dict[Path, SeriesInfo] = {}
@@ -399,11 +445,14 @@ def scan(
             if limit is not None and totals["found"] >= limit:
                 break
             totals["found"] += 1
+            relative_file = path.relative_to(root)
+            relative = str(relative_file)
+            # Record a discovered path before tag reading so an unreadable
+            # existing file does not cause its earlier database row to vanish.
+            seen_track_paths.add(relative)
             try:
                 # stat before tags lets repeat scans avoid opening unchanged audio.
                 stat = path.stat()
-                relative_file = path.relative_to(root)
-                relative = str(relative_file)
                 book_path = str(relative_file.parent)
                 books_seen.add(book_path)
                 totals["books"] = len(books_seen)
@@ -438,7 +487,6 @@ def scan(
                 store_result(connection, source, result, now)
                 totals["scanned"] += 1
             except (OSError, RuntimeError) as exc:
-                relative = str(path.relative_to(root))
                 connection.execute("""INSERT INTO scan_errors(source_id, relative_path, message, scanned_at) VALUES (?, ?, ?, ?)
                     ON CONFLICT(source_id, relative_path) DO UPDATE SET message=excluded.message, scanned_at=excluded.scanned_at""", (source, relative, str(exc), now))
                 totals["errors"] += 1
@@ -446,6 +494,10 @@ def scan(
                 connection.commit()
             if progress_every and totals["found"] % progress_every == 0:
                 report_progress(totals)
+        if limit is None:
+            (
+                totals["removed_tracks"], totals["removed_books"], totals["removed_series"],
+            ) = remove_missing_entries(connection, source, seen_track_paths)
         connection.execute("UPDATE catalog_sources SET last_scan_at=? WHERE id=?", (now, source))
         connection.commit()
         return totals
@@ -916,7 +968,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.progress_every < 0:
             parser.error("--progress-every must be zero or a positive number")
         totals = scan(args.root, args.database, args.force, args.limit, args.progress_every)
-        print("Finished — tracks: {found} found, {scanned} scanned, {unchanged} unchanged, {errors} errors; books: {books}.".format(**totals))
+        print(
+            "Finished — tracks: {found} found, {scanned} scanned, {unchanged} unchanged, {errors} errors; "
+            "books: {books}; removed: {removed_tracks} tracks, {removed_books} empty books, {removed_series} series records."
+            .format(**totals)
+        )
     elif args.command == "export-xml":
         count = export_xml(args.database, args.destination)
         print(f"Exported {count} tracks to {args.destination}")

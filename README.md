@@ -42,7 +42,10 @@ The next identical scan only performs directory/file `stat` checks; audio files
 whose size and modified time have not changed are not reopened. `--force` is
 available for a complete re-read. Progress is printed every 25 tracks by
 default; use `--progress-every 100` for fewer messages or `--progress-every 0`
-to disable it.
+to disable it. A complete scan also removes tracks no longer found under that
+source root, then removes their now-empty book records. This resolves stale
+entries after files or folders are renamed or moved. A `--limit` trial scan
+never removes database entries.
 
 ## Data model
 
