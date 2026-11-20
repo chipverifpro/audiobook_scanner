@@ -1,8 +1,72 @@
 # Audiobook scanner
 
-This is the initial, read-only catalogue builder for the audiobook collection.
+This python program scans directories of audiobook files and creates an SQL
+database and either a webpage for browsing or a compact text list of the books.
+
+The source folders should be organized like this...
+<pre>
+Audiobooks/
+  book_list.txt
+  catalog.html
+  Fiction/
+    Author/ - series
+      Book one/
+        description.txt
+        Track 1.mp3
+        Track 2.mp3
+      Book two/
+        desription.txt
+        Track 1.mp3
+      series.txt
+  Nonfiction/
+    Author - series/
+      Book one/
+        description.txt
+        Track 1.mp3
+      series.txt
+  zz_catalog_files/
+    series_complete_small.png
+    missing_small.png
+    ongoing_small.png
+    solo_small.png
+    broken_small.png
+    podcast_small.png
+    library_icon.png
+</pre>
+Inside the Author - series folder, you should have a series.txt file.  The first
+word in this file should be one of COMPLETE, MISSING, ONGOING, SOLO, BROKEN, or
+PODCAST.  After that, it can be any combination of text/html.  Formatted text is
+ok as whitespace is preserved when rendering the webpage.
+
+Inside the Book folder, there should be a cover.png or cover.jpg file of at least
+200x200 resolution.  There can be another file description.txt that contains a
+detailed description of the book.  The file may be formatted with HTML tags, or
+be raw text.  Note however, that unlike the series.txt file, whitespace is NOT
+preserved, so HTML paragraph markers are highly recommended, and any other HTML
+formatting can improve the appearance.  If this file is not present, the CONTENT
+field in the audio file is used instead.  That should be formatted the same way.
+
+Inside the book folder should also be the audio files themselves.  They can be
+in mp3 or m4a format, and can be any length or title.  It is recommended that
+they be sortable alphabetically to put them in the proper order for playing.
+
+Where I have the upper level folder Fiction, you can also have other types such
+as Nonfiction, Children, Librivox, etc.  These folders are not important, but
+allow some coarse organization of the directory.
+
+One more folder at the level of Fiction above should be a zz_catalog_files.
+This folder contains the badge images used in the webpage, as well as the page
+thumbnail, and come from the GitHub repository.
+
+zz_catalog_files
+
+
+
+## Overview
+
+This is a read-only catalogue builder for the audiobook collection.
 It scans tags once, records a local SQLite master catalogue, and can export the
-same data to XML. It does **not** write tags or rename files.
+same data to XML, TEXT, and HTML. It does **not** write tags or rename files.
 
 ## Setup
 
@@ -107,32 +171,7 @@ links that also work through another mount or an HTTP server.
 `--database` allows changing which database file to use.  This project is now local, so its default `data/` directory is the intended location for the database. Use `--database /a/local/path/catalog.sqlite3` only when you want a separate catalogue.
 
 
-Script to create all four webpages and book lists.
-
-# Librivox partial catalog (Mac)
-
-```sh
-# Librivox
-rm data/catalog_librivox.sqlite3
-python scanner.py scan /Volumes/OtterCloud/Audiobooks/LibriVox --database data/catalog_librivox.sqlite3
-python scanner.py export-html /Volumes/OtterCloud/Audiobooks/librivox.html --database data/catalog_librivox.sqlite3
-```
-rm data/catalog_librivox.sqlite3
-python scanner.py scan /Volumes/OtterCloud/Audiobooks/LibriVox --database data/catalog_librivox.sqlite3
-python scanner.py export-html /Volumes/OtterCloud/Audiobooks/librivox.html --database data/catalog_librivox.sqlite3
-python scanner.py export-book-list /Volumes/OtterCloud/Audiobooks/librivox_list.txt --database data/catalog_librivox.sqlite3
-
-# NonFiction partial catalog (Mac)
-rm data/catalog_nonfiction.sqlite3
-python scanner.py scan /Volumes/OtterCloud/Audiobooks/Nonfiction --database data/catalog_nonfiction.sqlite3
-python scanner.py export-html /Volumes/OtterCloud/Audiobooks/nonfiction.html --database data/catalog_nonfiction.sqlite3
-python scanner.py export-book-list /Volumes/OtterCloud/Audiobooks/nonfiction_list.txt --database data/catalog_nonfiction.sqlite3
-
-# Fiction partial catalog (Mac)
-rm data/catalog_fiction.sqlite3
-python scanner.py scan /Volumes/OtterCloud/Audiobooks/Fiction --database data/catalog_fiction.sqlite3
-python scanner.py export-html /Volumes/OtterCloud/Audiobooks/fiction.html --database data/catalog_fiction.sqlite3
-python scanner.py export-book-list /Volumes/OtterCloud/Audiobooks/fiction_list.txt --database data/catalog_fiction.sqlite3
+Script to create the webpage and book lists...
 
 # Full Catalog on Mac
 rm data/catalog.sqlite3
