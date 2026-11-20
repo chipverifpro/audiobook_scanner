@@ -70,11 +70,16 @@ Place an optional UTF-8 `series.html` or `series.txt` directly in a top-level
 `Author - Series` folder to record information for the series as a whole. Its
 source-relative filename and contents are stored once in the `series_info`
 database table.
-If the first word of the selected file is `COMPLETE` (case-insensitive), its
-`is_complete` flag is set to `1`; otherwise it is `0`. When both files exist,
-`series.html` takes precedence. The HTML export displays a completion badge in
-the series header and makes that header a link which opens the stored series
-information, without reading the network drive again.
+The first word of the selected file is case-insensitive and may be `COMPLETE`,
+`SOLO`, `ONGOING`, or `MISSING`; it is stored as the mutually exclusive series
+status. `COMPLETE` also sets the existing `is_complete` flag to `1`. When both
+files exist, `series.html` takes precedence. The HTML export displays the
+corresponding badge in the series header and makes that header a link which
+opens the stored series information, without reading the network drive again.
+The recognized status word and whitespace immediately following it are removed
+from the stored/displayed series text.
+When there is no series-information file, a series containing exactly one book
+gets the Solo badge automatically.
 
 ## Other functions supported
 
@@ -91,8 +96,8 @@ five spaces. Both headings and book names are sorted alphabetically.
 `export-html` creates an interactive catalogue grouped by Author - Series
 folder. It uses up to five cover thumbnails per row; clicking a cover toggles
 that book's details. Series headers with a `series.html` or `series.txt` file
-open its stored content; completed series show the
-`zz_catalog_files/series_complete_small.png` badge. Cover images use URLs relative to the generated HTML file,
+open its stored content; their status determines one of the `complete`, `solo`,
+`ongoing`, or `missing` badges in `zz_catalog_files/`. Cover images use URLs relative to the generated HTML file,
 so place the catalogue at the audiobook-library level (for example,
 `/Volumes/OtterCloud/Audiobooks/catalog.html`) to produce `Fiction/...` image
 links that also work through another mount or an HTTP server.
