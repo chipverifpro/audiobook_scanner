@@ -34,6 +34,7 @@ SERIES_BADGE_FILENAMES = {
     "solo": "solo_small.png",
     "ongoing": "ongoing_small.png",
     "missing": "missing_small.png",
+    "broken": "broken_small.png",
 }
 
 
@@ -206,7 +207,7 @@ def read_series_info(series_directory: Path, root: Path) -> SeriesInfo:
             raise RuntimeError(f"cannot read {filename}: {exc}") from exc
         first_word = re.match(r"\s*([A-Za-z]+)\b[ \t\r\n]*", text)
         status = first_word.group(1).casefold() if first_word else None
-        if status not in {"complete", "solo", "ongoing", "missing"}:
+        if status not in {"complete", "solo", "ongoing", "missing", "broken"}:
             status = None
         # Status markers control the badge but should not appear at the start
         # of the overview shown in the generated catalogue.
@@ -865,10 +866,6 @@ function closeDetails(id) {
         else:
             heading_html = html_escape(heading)
         series_status = series_record["series_status"]
-        # An explicit status in the series file takes precedence. A series
-        # without an information file is Solo only when it has one book.
-        if series_status is None and not series_info_path and len(books_in_series) == 1:
-            series_status = "solo"
         badge_filename = SERIES_BADGE_FILENAMES.get(series_status)
         badge_html = (
             f'<img class="series-complete-badge" src="zz_catalog_files/{badge_filename}" '
