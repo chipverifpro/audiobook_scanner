@@ -189,7 +189,11 @@ python scanner.py scan W:\Audiobooks\LibriVox
 python scanner.py export-html W:\Audiobooks\catalog_win.html --source-root W:\Audiobooks
 python scanner.py export-book-list W:\Audiobooks\book_list_win.txt
 
+<IMG SRC="output_examples/screenshot.png">
+
 # Example outputs
 <li>Example list file: <A href="output_examples/book_list.txt">book_list.txt</A>
 <li>Example html file: <A href="output_examples/catalog.html">catalog.html</A>
-<br>Note that the html example doesn't have the image files here.
+<br>Note that the html example above doesn't have the image files here.
+
+<li>sample image of html file: <A href="output_examples/screenshot.png">screenshot.png</A></li>
