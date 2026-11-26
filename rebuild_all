@@ -1,0 +1,16 @@
+#
+echo "Setting up Python environment"
+python3 -m venv .venv
+. .venv/bin/activate
+echo "If scanning fails completely, check that the OtterCloud drive is mounted."
+echo "Scanning Fiction, about 1100 books..."
+python scanner.py scan /Volumes/OtterCloud/Audiobooks/Fiction
+echo "Scanning Nonfiction, about 60 books..."
+python scanner.py scan /Volumes/OtterCloud/Audiobooks/Nonfiction
+echo "Scanning LibriVox, about 120 books..."
+python scanner.py scan /Volumes/OtterCloud/Audiobooks/LibriVox
+echo "Generating catalog.html"
+python scanner.py export-html /Volumes/OtterCloud/Audiobooks/catalog.html --source-root /Volumes/OtterCloud/Audiobooks
+echo "Generating book_list.txt"
+python scanner.py export-book-list /Volumes/OtterCloud/Audiobooks/book_list.txt
+echo "Done."
